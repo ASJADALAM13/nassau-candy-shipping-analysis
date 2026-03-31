@@ -1,0 +1,21 @@
+# ignore data files
+data/
+
+# ignore jupyter checkpoints
+.ipynb_checkpoints/
+
+# ignore python cache
+__pycache__/
+*.pyc
+
+# ignore virtual environment
+# ignore virtual environment
+venv/
+.venv/
+
+# ignore report outputs
+report/*.png
+
+# ignore system files
+.DS_Store
+Thumbs.db

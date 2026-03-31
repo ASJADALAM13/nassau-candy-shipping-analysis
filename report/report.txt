@@ -1,0 +1,24 @@
+Nassu Candy Distributor Report:
+-It has 10194 Rows and 18 Columns
+
+-Rows:               DataType:
+Row ID              int64
+Order ID           object
+Order Date         object
+Ship Date          object
+Ship Mode          object
+Customer ID         int64
+Country/Region     object
+City               object
+State/Province     object
+Postal Code        object
+Division           object
+Region             object
+Product ID         object
+Product Name       object
+Sales             float64
+Units               int64
+Gross Profit      float64
+Cost              float64
+
+-0 Rows Has missing Value
