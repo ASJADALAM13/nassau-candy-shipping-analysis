@@ -73,7 +73,7 @@ Factory performance rankings, top 15 most delayed states, and order-level shipme
 
 **Step 1 — Clone the repo**
 ```bash
-git clone https://github.com/YOUR_USERNAME/nassau-candy-shipping-analysis.git
+git clone https://github.com/ASJADALAM13/nassau-candy-shipping-analysis.git
 cd nassau-candy-shipping-analysis
 ```
 
@@ -128,11 +128,10 @@ This project was built as part of a Data Analytics Internship with Nassau Candy 
 ## About
 
 **Analyst:** MD Asjad Alam
-**Program:** Data Analytics Internship
+**Program:**  Internship
 **Organization:** Nassau Candy Distributor
 **Date:** April 2026
-**GitHub:** [nassau-candy-shipping-analysis](https://github.com/YOUR_USERNAME/nassau-candy-shipping-analysis)
+**GitHub:** [nassau-candy-shipping-analysis](https://github.com/ASJADALAM13/nassau-candy-shipping-analysis)
 
----
 
 *Built with Python, Pandas, Plotly, and Streamlit.*
