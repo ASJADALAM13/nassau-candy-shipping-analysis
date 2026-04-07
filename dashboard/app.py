@@ -26,7 +26,8 @@ st.set_page_config(
 @st.cache_data
 def load_data():
     # df = pd.read_csv(r"A:\UM\nassau_candy_project\data\Nassau Candy Distributor.csv")
-    df = pd.read_csv(r"data\Nassau Candy Distributor.csv")
+    df = pd.read_csv(r"data/Nassau Candy Distributor.csv")
+
     df['Order Date'] = pd.to_datetime(df['Order Date'], format='%d-%m-%Y')
     df['Ship Date'] = pd.to_datetime(df['Ship Date'], format='%d-%m-%Y')
     df['Lead Time'] = (df['Ship Date'] - df['Order Date']).dt.days
@@ -349,7 +350,7 @@ location_coords = {
     'Newfoundland and Labrador': (53.1, -59.0),
     'Prince Edward Island': (46.3, -63.3)
 }
-
+#From Project Description
 factory_coords = {
     "Lot's O' Nuts":     {'lat': 32.881893, 'lon': -111.768036},
     "Wicked Choccy's":   {'lat': 32.076176, 'lon': -81.088371},
