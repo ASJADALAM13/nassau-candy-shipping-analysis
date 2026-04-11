@@ -1,7 +1,16 @@
+
+
 # ============================================================
 # Nassau Candy Distributor
 # Factory-to-Customer Shipping Route Efficiency Dashboard
+# Built by: MD Asjad Alam | Data Analytics Internship | April 2026
 # ============================================================
+# This dashboard analyzes planned shipping route efficiency
+# across Nassau Candy's factory-to-customer network.
+# Note: Ship Dates are planned future delivery dates (2026-2030),
+# so all lead times represent planned delivery timelines.
+# ============================================================
+
 import os
 import streamlit as st
 import pandas as pd
@@ -12,6 +21,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 # ============================================================
 # PAGE CONFIGURATION
+# set the browser tab title, icon, and layout
 # ============================================================
 st.set_page_config(
     page_title="Nassau Candy Shipping Dashboard",
@@ -21,17 +31,34 @@ st.set_page_config(
 )
 
 # ============================================================
-# LOAD DATA
+# LOAD AND PREPARE DATA
+# we cache this so the app does not reload data on every filter change
 # ============================================================
 @st.cache_data
 def load_data():
-    # df = pd.read_csv(r"A:\UM\nassau_candy_project\data\Nassau Candy Distributor.csv")
-    df = pd.read_csv(r"data/Nassau Candy Distributor.csv")
+    # loading the main dataset
+    df = pd.read_csv(r"A:\UM\nassau_candy_project\data\Nassau Candy Distributor.csv")
 
+    # using a relative path so this works both locally and on Streamlit Cloud
+    # df = pd.read_csv('data/Nassau Candy Distributor.csv')
+
+    # converting date columns from text to proper datetime format
+    # without this conversion we cannot subtract dates to get lead time
     df['Order Date'] = pd.to_datetime(df['Order Date'], format='%d-%m-%Y')
     df['Ship Date'] = pd.to_datetime(df['Ship Date'], format='%d-%m-%Y')
+
+    # calculating planned lead time in days
+    # Ship Dates are planned future delivery dates (2026-2030)
+    # so this represents the planned number of days from order to delivery
     df['Lead Time'] = (df['Ship Date'] - df['Order Date']).dt.days
+
+    # removing any records where lead time is zero or negative
+    # those would be data entry errors and make no logical sense
     df = df[df['Lead Time'] > 0]
+
+    # mapping each product to its factory
+    # this information comes from the project description
+    # since the dataset does not have a Factory column directly
     factory_mapping = {
         'Wonka Bar - Nutty Crunch Surprise': "Lot's O' Nuts",
         'Wonka Bar - Fudge Mallows': "Lot's O' Nuts",
@@ -49,16 +76,26 @@ def load_data():
         'Wonka Gum': 'Secret Factory',
         'Kazookles': 'The Other Factory'
     }
+
+    # applying the factory mapping to create a new Factory column
     df['Factory'] = df['Product Name'].map(factory_mapping)
+
+    # creating the Route column — the core feature of this entire analysis
+    # State-level route: Factory → Customer State (196 unique routes)
+    # Region-level route: Factory → Customer Region (20 unique routes)
     df['Route'] = df['Factory'] + ' → ' + df['State/Province']
     df['Region Route'] = df['Factory'] + ' → ' + df['Region']
+
     return df
 
+# loading the data when the app starts
 df = load_data()
 
 # ============================================================
-# SIDEBAR
+# SIDEBAR — BRANDING AND FILTERS
 # ============================================================
+
+# branded header using custom HTML since Streamlit does not have a styled banner component
 st.sidebar.markdown("""
 <div style='background-color:#2E75B6; padding:15px; border-radius:8px; text-align:center;'>
     <h2 style='color:white; margin:0;'>🍬 Nassau Candy</h2>
@@ -68,9 +105,11 @@ st.sidebar.markdown("""
 
 st.sidebar.markdown("---")
 st.sidebar.title("Dashboard Filters")
+st.sidebar.caption("All filters update every chart on this page in real time.")
 
-# date range filter
-st.sidebar.subheader("📅 Date Range")
+# --- Date Range Filter ---
+# lets users focus on a specific period of order dates
+st.sidebar.subheader("📅 Order Date Range")
 min_date = df['Order Date'].min().date()
 max_date = df['Order Date'].max().date()
 start_date, end_date = st.sidebar.date_input(
@@ -80,13 +119,15 @@ start_date, end_date = st.sidebar.date_input(
     max_value=max_date
 )
 
-# region filter
+# --- Region Filter ---
+# selecting a region also updates the State filter below it
 st.sidebar.subheader("🌍 Region")
 all_regions = ['All'] + sorted(df['Region'].unique().tolist())
 selected_region = st.sidebar.selectbox("Select Region", all_regions)
 
-# state filter
-st.sidebar.subheader("📍 State")
+# --- State Filter ---
+# if a region is selected, only show states from that region
+st.sidebar.subheader("📍 State / Province")
 if selected_region == 'All':
     all_states = ['All'] + sorted(df['State/Province'].unique().tolist())
 else:
@@ -95,13 +136,14 @@ else:
     )
 selected_state = st.sidebar.selectbox("Select State", all_states)
 
-# ship mode filter
+# --- Ship Mode Filter ---
 st.sidebar.subheader("🚚 Ship Mode")
 all_shipmodes = ['All'] + sorted(df['Ship Mode'].unique().tolist())
 selected_shipmode = st.sidebar.selectbox("Select Ship Mode", all_shipmodes)
 
-# lead time threshold slider
-st.sidebar.subheader("⏱️ Lead Time Threshold")
+# --- Lead Time Threshold Slider ---
+# lets users filter out routes with planned lead times above a threshold
+st.sidebar.subheader("⏱️ Max Planned Lead Time")
 max_lead = int(df['Lead Time'].max())
 min_lead = int(df['Lead Time'].min())
 lead_threshold = st.sidebar.slider(
@@ -112,51 +154,81 @@ lead_threshold = st.sidebar.slider(
 )
 
 st.sidebar.markdown("---")
+
+# project info section at the bottom of sidebar
 st.sidebar.markdown("""
 **About this Dashboard**
 - **Project:** Nassau Candy Shipping Analysis
 - **Analyst:** MD Asjad Alam
-- **Data:** 10,194 orders (2024-2025)
-- **Routes:** 196 unique routes
-- **Factories:** 5 factories
+- **Orders:** 10,194 (Jan 2024 – Dec 2025)
+- **Routes:** 196 unique factory-to-state routes
+- **Factories:** 5 manufacturing locations
+- **Note:** Ship Dates are planned future dates
 """)
 
 # ============================================================
-# APPLYING FILTERS
+# APPLYING FILTERS TO THE DATASET
+# we apply filters one by one so each one stacks on the previous
 # ============================================================
 filtered_df = df.copy()
+
+# applying the date range filter on Order Date
 filtered_df = filtered_df[
     (filtered_df['Order Date'].dt.date >= start_date) &
     (filtered_df['Order Date'].dt.date <= end_date)
 ]
+
+# applying region filter if a specific region was selected
 if selected_region != 'All':
     filtered_df = filtered_df[filtered_df['Region'] == selected_region]
+
+# applying state filter if a specific state was selected
 if selected_state != 'All':
     filtered_df = filtered_df[filtered_df['State/Province'] == selected_state]
+
+# applying ship mode filter if a specific mode was selected
 if selected_shipmode != 'All':
     filtered_df = filtered_df[filtered_df['Ship Mode'] == selected_shipmode]
+
+# applying the lead time threshold — removes orders with very long planned lead times
 filtered_df = filtered_df[filtered_df['Lead Time'] <= lead_threshold]
 
-# safety check
+# safety check — if filters remove all data, show a warning and stop
+# without this the app would crash with confusing errors
 if len(filtered_df) == 0:
-    st.warning("⚠️ No data found for the selected filters. Please adjust your filters.")
+    st.warning("⚠️ No data found for the selected filters. Please adjust your filters and try again.")
     st.stop()
 
 # ============================================================
-# COMPUTING KPIs
+# COMPUTING KPIs FROM FILTERED DATA
+# all calculations below use the filtered dataset
+# so every metric updates when filters change
 # ============================================================
+
+# using average lead time as our delay threshold
+# any order with lead time above average is flagged as "above average delay"
+# we use average because a fixed day threshold (like 5 days) does not
+# make sense when planned lead times range from 904 to 1,642 days
 avg_lead_time = filtered_df['Lead Time'].mean()
 filtered_df = filtered_df.copy()
 filtered_df['Is Delayed'] = filtered_df['Lead Time'] > avg_lead_time
 
+# --- Route Level Analysis ---
+# grouping all orders by route and calculating performance metrics
 route_analysis = filtered_df.groupby('Route').agg(
     Total_Shipments=('Order ID', 'count'),
     Avg_Lead_Time=('Lead Time', 'mean'),
     Delay_Frequency=('Is Delayed', 'mean')
 ).reset_index()
+
+# converting delay frequency from decimal to percentage and rounding
 route_analysis['Delay_Frequency_%'] = (route_analysis['Delay_Frequency'] * 100).round(2)
 route_analysis['Avg_Lead_Time'] = route_analysis['Avg_Lead_Time'].round(2)
 
+# calculating Route Efficiency Score using Min-Max normalization
+# this combines lead time and delay frequency into one score between 0 and 1
+# higher score = more efficient route
+# we need at least 2 routes to normalize — otherwise just set score to 1.0
 scaler = MinMaxScaler()
 if len(route_analysis) > 1:
     route_analysis['Norm_Lead_Time'] = scaler.fit_transform(route_analysis[['Avg_Lead_Time']])
@@ -167,10 +239,12 @@ if len(route_analysis) > 1:
 else:
     route_analysis['Efficiency_Score'] = 1.0
 
+# sorting by efficiency score — best routes at the top
 route_analysis = route_analysis.sort_values(
     'Efficiency_Score', ascending=False
 ).reset_index(drop=True)
 
+# --- Ship Mode Analysis ---
 shipmode_analysis = filtered_df.groupby('Ship Mode').agg(
     Total_Shipments=('Order ID', 'count'),
     Avg_Lead_Time=('Lead Time', 'mean'),
@@ -179,6 +253,7 @@ shipmode_analysis = filtered_df.groupby('Ship Mode').agg(
 shipmode_analysis['Delay_Frequency_%'] = (shipmode_analysis['Delay_Frequency'] * 100).round(2)
 shipmode_analysis['Avg_Lead_Time'] = shipmode_analysis['Avg_Lead_Time'].round(2)
 
+# --- State Level Analysis ---
 state_analysis = filtered_df.groupby('State/Province').agg(
     Total_Shipments=('Order ID', 'count'),
     Avg_Lead_Time=('Lead Time', 'mean'),
@@ -187,6 +262,8 @@ state_analysis = filtered_df.groupby('State/Province').agg(
 state_analysis['Delay_Frequency_%'] = (state_analysis['Delay_Frequency'] * 100).round(2)
 state_analysis['Avg_Lead_Time'] = state_analysis['Avg_Lead_Time'].round(2)
 
+# --- Factory Level Analysis ---
+# sorted ascending so best performing factory (lowest lead time) appears first
 factory_analysis = filtered_df.groupby('Factory').agg(
     Total_Shipments=('Order ID', 'count'),
     Avg_Lead_Time=('Lead Time', 'mean'),
@@ -197,31 +274,64 @@ factory_analysis['Avg_Lead_Time'] = factory_analysis['Avg_Lead_Time'].round(2)
 factory_analysis = factory_analysis.sort_values('Avg_Lead_Time').reset_index(drop=True)
 
 # ============================================================
-# DASHBOARD HEADER
+# MAIN DASHBOARD — HEADER
 # ============================================================
 st.title("🍬 Nassau Candy Distributor")
 st.subheader("Factory-to-Customer Shipping Route Efficiency Dashboard")
 st.markdown("---")
 
-# filter summary
-st.info(f"📊 Showing **{len(filtered_df):,}** orders | Region: **{selected_region}** | State: **{selected_state}** | Ship Mode: **{selected_shipmode}** | Max Lead Time: **{lead_threshold} days**")
+# showing the user exactly what data they are currently looking at
+st.info(
+    f"📊 Showing **{len(filtered_df):,}** orders  |  "
+    f"Region: **{selected_region}**  |  "
+    f"State: **{selected_state}**  |  "
+    f"Ship Mode: **{selected_shipmode}**  |  "
+    f"Max Lead Time: **{lead_threshold:,} days**"
+)
+
+# important disclaimer about the nature of this dataset
+st.caption(
+    "📌 Note: Ship Dates in this dataset represent planned future delivery dates (2026–2030). "
+    "All lead times and delay rates reflect planned delivery timelines, not historical completed deliveries. "
+    "This is a forward-looking logistics planning analysis."
+)
 
 # ============================================================
-# KPI CARDS
+# KPI CARDS — 5 KEY METRICS AT A GLANCE
 # ============================================================
 st.subheader("📊 Key Performance Indicators")
 col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
-    st.metric(label="Total Orders", value=f"{len(filtered_df):,}")
+    st.metric(
+        label="Total Orders",
+        value=f"{len(filtered_df):,}",
+        help="Total number of orders in the filtered dataset"
+    )
 with col2:
-    st.metric(label="Avg Lead Time", value=f"{filtered_df['Lead Time'].mean():.1f} days")
+    st.metric(
+        label="Avg Planned Lead Time",
+        value=f"{filtered_df['Lead Time'].mean():.0f} days",
+        help="Average number of days between order placement and planned delivery"
+    )
 with col3:
-    st.metric(label="Total Routes", value=f"{route_analysis.shape[0]}")
+    st.metric(
+        label="Total Routes",
+        value=f"{route_analysis.shape[0]}",
+        help="Number of unique factory-to-state routes in the filtered data"
+    )
 with col4:
-    st.metric(label="Delay Frequency", value=f"{filtered_df['Is Delayed'].mean()*100:.1f}%")
+    st.metric(
+        label="Above-Average Delay Rate",
+        value=f"{filtered_df['Is Delayed'].mean()*100:.1f}%",
+        help="Percentage of orders with planned lead time above the average threshold"
+    )
 with col5:
-    st.metric(label="Avg Efficiency Score", value=f"{route_analysis['Efficiency_Score'].mean():.3f}")
+    st.metric(
+        label="Avg Efficiency Score",
+        value=f"{route_analysis['Efficiency_Score'].mean():.3f}",
+        help="Average route efficiency score (0 = worst, 1 = best)"
+    )
 
 st.markdown("---")
 
@@ -229,11 +339,15 @@ st.markdown("---")
 # MODULE 1 — ROUTE EFFICIENCY OVERVIEW
 # ============================================================
 st.header("📦 Module 1 — Route Efficiency Overview")
+st.caption(
+    "The Route Efficiency Score combines planned lead time and above-average delay rate "
+    "into a single normalized score. Higher is better. Score of 1.0 = perfect, 0.0 = critical."
+)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("🏆 Top 10 Most Efficient Routes")
+    st.subheader("🏆 Top 10 Best Performing Routes")
     top10 = route_analysis.head(10)
     fig_top = px.bar(
         top10,
@@ -243,17 +357,20 @@ with col1:
         color='Efficiency_Score',
         color_continuous_scale='Blues',
         text='Efficiency_Score',
-        labels={'Efficiency_Score': 'Score', 'Route': 'Route'}
+        labels={'Efficiency_Score': 'Efficiency Score', 'Route': 'Route'},
+        title='Top 10 Routes — Planned to Perform Best'
     )
     fig_top.update_layout(
         plot_bgcolor='white',
-        height=400,
-        yaxis={'categoryorder': 'total ascending'}
+        height=420,
+        yaxis={'categoryorder': 'total ascending'},
+        showlegend=False
     )
+    fig_top.update_traces(texttemplate='%{text:.4f}', textposition='outside')
     st.plotly_chart(fig_top, use_container_width=True)
 
 with col2:
-    st.subheader("⚠️ Bottom 10 Least Efficient Routes")
+    st.subheader("⚠️ Bottom 10 Routes Needing Attention")
     bottom10 = route_analysis.tail(10)
     fig_bottom = px.bar(
         bottom10,
@@ -263,50 +380,47 @@ with col2:
         color='Efficiency_Score',
         color_continuous_scale='Reds',
         text='Efficiency_Score',
-        labels={'Efficiency_Score': 'Score', 'Route': 'Route'}
+        labels={'Efficiency_Score': 'Efficiency Score', 'Route': 'Route'},
+        title='Bottom 10 Routes — Planned to Underperform'
     )
     fig_bottom.update_layout(
         plot_bgcolor='white',
-        height=400,
-        yaxis={'categoryorder': 'total descending'}
+        height=420,
+        yaxis={'categoryorder': 'total descending'},
+        showlegend=False
     )
+    fig_bottom.update_traces(texttemplate='%{text:.4f}', textposition='outside')
     st.plotly_chart(fig_bottom, use_container_width=True)
 
-# route leaderboard
+# full route leaderboard with progress bar for efficiency score
 st.subheader("📋 Full Route Performance Leaderboard")
+st.caption("Click any column header to sort. The Efficiency Score bar shows relative performance at a glance.")
 st.dataframe(
-    route_analysis[['Route', 'Total_Shipments',
-                    'Avg_Lead_Time', 'Delay_Frequency_%',
-                    'Efficiency_Score']],
+    route_analysis[['Route', 'Total_Shipments', 'Avg_Lead_Time', 'Delay_Frequency_%', 'Efficiency_Score']],
     use_container_width=True,
-    height=400,
+    height=420,
     column_config={
+        "Route": st.column_config.TextColumn("Route", width="large"),
+        "Total_Shipments": st.column_config.NumberColumn("Total Orders", format="%d"),
+        "Avg_Lead_Time": st.column_config.NumberColumn("Avg Planned Lead Time (Days)", format="%.2f"),
+        "Delay_Frequency_%": st.column_config.NumberColumn("Above-Avg Delay Rate %", format="%.2f%%"),
         "Efficiency_Score": st.column_config.ProgressColumn(
             "Efficiency Score",
             min_value=0,
             max_value=1,
             format="%.4f"
-        ),
-        "Delay_Frequency_%": st.column_config.NumberColumn(
-            "Delay Frequency %",
-            format="%.2f%%"
-        ),
-        "Avg_Lead_Time": st.column_config.NumberColumn(
-            "Avg Lead Time (Days)",
-            format="%.2f"
         )
     }
 )
 
-# download button
-csv = route_analysis[['Route', 'Total_Shipments',
-                       'Avg_Lead_Time', 'Delay_Frequency_%',
-                       'Efficiency_Score']].to_csv(index=False)
+# download button so users can take the analysis offline
+csv = route_analysis[['Route', 'Total_Shipments', 'Avg_Lead_Time', 'Delay_Frequency_%', 'Efficiency_Score']].to_csv(index=False)
 st.download_button(
-    label="📥 Download Route Analysis CSV",
+    label="📥 Download Route Analysis as CSV",
     data=csv,
     file_name="nassau_candy_route_analysis.csv",
-    mime="text/csv"
+    mime="text/csv",
+    help="Download the full route performance table as a CSV file"
 )
 
 st.markdown("---")
@@ -315,7 +429,16 @@ st.markdown("---")
 # MODULE 2 — GEOGRAPHIC SHIPPING MAP
 # ============================================================
 st.header("🗺️ Module 2 — Geographic Shipping Map")
+st.caption(
+    "Each circle represents a delivery destination. "
+    "Circle size = number of orders. Circle color = planned average lead time. "
+    "Green = shorter planned lead time. Red = longer planned lead time."
+)
 
+# geographic center coordinates for all US states and Canadian provinces
+# sourced from standard geographic reference data
+# used because our data includes both US and Canadian customers
+# a standard US choropleth map cannot show Canadian provinces
 location_coords = {
     'Alabama': (32.8, -86.8), 'Alaska': (64.2, -153.4),
     'Arizona': (34.3, -111.1), 'Arkansas': (34.8, -92.2),
@@ -343,6 +466,7 @@ location_coords = {
     'Washington': (47.4, -121.5), 'West Virginia': (38.5, -80.6),
     'Wisconsin': (44.3, -89.6), 'Wyoming': (43.0, -107.6),
     'District of Columbia': (38.9, -77.0),
+    # Canadian provinces — included because our dataset has Canadian customers
     'Ontario': (51.3, -85.3), 'Alberta': (55.0, -115.0),
     'British Columbia': (53.7, -127.6), 'Quebec': (52.9, -73.5),
     'Nova Scotia': (45.0, -63.0), 'Manitoba': (55.0, -97.0),
@@ -350,7 +474,8 @@ location_coords = {
     'Newfoundland and Labrador': (53.1, -59.0),
     'Prince Edward Island': (46.3, -63.3)
 }
-#From Project Description
+
+# exact factory coordinates sourced directly from project description
 factory_coords = {
     "Lot's O' Nuts":     {'lat': 32.881893, 'lon': -111.768036},
     "Wicked Choccy's":   {'lat': 32.076176, 'lon': -81.088371},
@@ -363,21 +488,25 @@ factory_coords_df = pd.DataFrame([
     for name, v in factory_coords.items()
 ])
 
+# mapping coordinates to the state analysis dataframe
 state_analysis['Lat'] = state_analysis['State/Province'].map(
     lambda x: location_coords.get(x, (None, None))[0]
 )
 state_analysis['Lon'] = state_analysis['State/Province'].map(
     lambda x: location_coords.get(x, (None, None))[1]
 )
+
+# dropping any states we do not have coordinates for
 state_map = state_analysis.dropna(subset=['Lat', 'Lon'])
 
+# map view toggle — customer destinations only or full network with factories
 map_type = st.radio(
     "Select Map View:",
-    ["Customer Destinations", "Complete Shipping Network"],
+    ["📍 Customer Destinations Only", "🌐 Complete Shipping Network (with factories)"],
     horizontal=True
 )
 
-if map_type == "Customer Destinations":
+if "Customer" in map_type:
     fig_map = px.scatter_geo(
         state_map,
         lat='Lat', lon='Lon',
@@ -390,12 +519,13 @@ if map_type == "Customer Destinations":
             'Total_Shipments': True,
             'Lat': False, 'Lon': False
         },
-        title='Average Shipping Lead Time — US and Canada',
+        title='Planned Average Lead Time by Delivery Destination — US and Canada',
         color_continuous_scale='RdYlGn_r',
         scope='north america',
-        labels={'Avg_Lead_Time': 'Avg Lead Time (Days)'}
+        labels={'Avg_Lead_Time': 'Avg Planned Lead Time (Days)'}
     )
 else:
+    # complete network view with both customer circles and factory stars
     fig_map = px.scatter_geo(
         state_map,
         lat='Lat', lon='Lon',
@@ -408,25 +538,31 @@ else:
             'Total_Shipments': True,
             'Lat': False, 'Lon': False
         },
-        title='Nassau Candy — Complete Shipping Network',
+        title='Nassau Candy — Complete Planned Shipping Network (Factories + Destinations)',
         color_continuous_scale='RdYlGn_r',
         scope='north america',
-        labels={'Avg_Lead_Time': 'Avg Lead Time (Days)'}
+        labels={'Avg_Lead_Time': 'Avg Planned Lead Time (Days)'}
     )
+    # adding factory locations as gold stars
+    # hover over a star to see the factory name
     fig_map.add_trace(go.Scattergeo(
         lat=factory_coords_df['Lat'],
         lon=factory_coords_df['Lon'],
         text=factory_coords_df['Factory'],
         mode='markers',
-        marker=dict(symbol='star', size=20,
-                    color='gold',
-                    line=dict(color='black', width=1)),
+        marker=dict(
+            symbol='star',
+            size=20,
+            color='gold',
+            line=dict(color='black', width=1)
+        ),
         name='Factories',
         hoverinfo='text'
     ))
 
 fig_map.update_layout(
     height=600,
+    legend=dict(orientation='h', yanchor='bottom', y=-0.1, xanchor='center', x=0.5),
     geo=dict(
         showland=True, landcolor='lightgray',
         showocean=True, oceancolor='lightblue',
@@ -444,11 +580,15 @@ st.markdown("---")
 # MODULE 3 — SHIP MODE COMPARISON
 # ============================================================
 st.header("🚚 Module 3 — Ship Mode Comparison")
+st.caption(
+    "Comparing all 4 shipping methods by planned lead time and above-average delay rate. "
+    "Surprising finding: Standard Class is both the fastest and most cost-effective option."
+)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Average Lead Time by Ship Mode")
+    st.subheader("Planned Lead Time by Ship Mode")
     fig_sm1 = px.bar(
         shipmode_analysis.sort_values('Avg_Lead_Time'),
         x='Ship Mode',
@@ -456,13 +596,15 @@ with col1:
         color='Avg_Lead_Time',
         color_continuous_scale='RdYlGn_r',
         text='Avg_Lead_Time',
-        labels={'Avg_Lead_Time': 'Avg Lead Time (Days)'}
+        labels={'Avg_Lead_Time': 'Avg Planned Lead Time (Days)'},
+        title='Which Ship Mode is Planned to Deliver Fastest?'
     )
-    fig_sm1.update_layout(plot_bgcolor='white', height=350)
+    fig_sm1.update_layout(plot_bgcolor='white', height=380)
+    fig_sm1.update_traces(texttemplate='%{text:.1f}', textposition='outside')
     st.plotly_chart(fig_sm1, use_container_width=True)
 
 with col2:
-    st.subheader("Delay Frequency by Ship Mode")
+    st.subheader("Above-Average Delay Rate by Ship Mode")
     fig_sm2 = px.bar(
         shipmode_analysis.sort_values('Delay_Frequency_%'),
         x='Ship Mode',
@@ -470,9 +612,11 @@ with col2:
         color='Delay_Frequency_%',
         color_continuous_scale='RdYlGn_r',
         text='Delay_Frequency_%',
-        labels={'Delay_Frequency_%': 'Delay Frequency (%)'}
+        labels={'Delay_Frequency_%': 'Above-Average Delay Rate (%)'},
+        title='Which Ship Mode Has the Highest Planned Delay Rate?'
     )
-    fig_sm2.update_layout(plot_bgcolor='white', height=350)
+    fig_sm2.update_layout(plot_bgcolor='white', height=380)
+    fig_sm2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     st.plotly_chart(fig_sm2, use_container_width=True)
 
 st.markdown("---")
@@ -481,11 +625,16 @@ st.markdown("---")
 # MODULE 4 — ROUTE DRILL DOWN
 # ============================================================
 st.header("🔍 Module 4 — Route Drill Down")
+st.caption(
+    "Deeper look at factory-level and state-level performance. "
+    "Use the sidebar filters to isolate specific routes or regions."
+)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Factory Performance")
+    st.subheader("Factory Performance Comparison")
+    st.caption("Bar height = planned avg lead time. Color = above-average delay rate.")
     fig_factory = px.bar(
         factory_analysis,
         x='Factory',
@@ -494,18 +643,20 @@ with col1:
         color_continuous_scale='RdYlGn_r',
         text='Avg_Lead_Time',
         labels={
-            'Avg_Lead_Time': 'Avg Lead Time (Days)',
-            'Factory': 'Factory Name'
-        }
+            'Avg_Lead_Time': 'Avg Planned Lead Time (Days)',
+            'Factory': 'Factory Name',
+            'Delay_Frequency_%': 'Above-Avg Delay Rate %'
+        },
+        title='Which Factory Has the Best Planned Delivery Timeline?'
     )
-    fig_factory.update_layout(plot_bgcolor='white', height=350)
+    fig_factory.update_layout(plot_bgcolor='white', height=380)
+    fig_factory.update_traces(texttemplate='%{text:.1f}', textposition='outside')
     st.plotly_chart(fig_factory, use_container_width=True)
 
 with col2:
-    st.subheader("Top 15 Most Delayed States")
-    top_states = state_analysis.sort_values(
-        'Avg_Lead_Time', ascending=False
-    ).head(15)
+    st.subheader("Top 15 States with Longest Planned Lead Times")
+    st.caption("These are the destinations with the highest planned delivery timelines.")
+    top_states = state_analysis.sort_values('Avg_Lead_Time', ascending=False).head(15)
     fig_state = px.bar(
         top_states,
         x='Avg_Lead_Time',
@@ -515,28 +666,39 @@ with col2:
         color_continuous_scale='RdYlGn_r',
         text='Avg_Lead_Time',
         labels={
-            'Avg_Lead_Time': 'Avg Lead Time (Days)',
-            'State/Province': 'State'
-        }
+            'Avg_Lead_Time': 'Avg Planned Lead Time (Days)',
+            'State/Province': 'State / Province',
+            'Delay_Frequency_%': 'Above-Avg Delay Rate %'
+        },
+        title='States with Longest Planned Delivery Timelines'
     )
     fig_state.update_layout(
         plot_bgcolor='white',
-        height=350,
+        height=380,
         yaxis={'categoryorder': 'total ascending'}
     )
+    fig_state.update_traces(texttemplate='%{text:.1f}', textposition='outside')
     st.plotly_chart(fig_state, use_container_width=True)
 
-# order level data
-st.subheader("📋 Order Level Shipment Data")
+# order level data table — individual shipment view
+st.subheader("📋 Order-Level Shipment Planning Data")
+st.caption(
+    "Every individual order with its planned lead time and delay status. "
+    "Sorted by longest planned lead time first. "
+    "Is Delayed = True means the planned lead time exceeds the current average."
+)
 st.dataframe(
     filtered_df[[
         'Order ID', 'Order Date', 'Ship Date',
         'Lead Time', 'Factory', 'Route',
         'Ship Mode', 'State/Province', 'Region',
         'Is Delayed'
-    ]].sort_values('Lead Time', ascending=False),
+    ]].sort_values('Lead Time', ascending=False).rename(columns={
+        'Lead Time': 'Planned Lead Time (Days)',
+        'Is Delayed': 'Above Avg Lead Time'
+    }),
     use_container_width=True,
-    height=400
+    height=420
 )
 
 # ============================================================
@@ -545,8 +707,8 @@ st.dataframe(
 st.markdown("---")
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.caption("🍭 Nassau Candy Distributor")
+    st.caption("🍬 Nassau Candy Distributor")
 with col2:
-    st.caption("📈 Internship Project")
+    st.caption("📊 Data Analytics Internship Project | April 2026")
 with col3:
-    st.caption(" MD Asjad Alam | April 2026")
+    st.caption("👨‍💻 MD Asjad Alam")
