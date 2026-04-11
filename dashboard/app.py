@@ -37,10 +37,10 @@ st.set_page_config(
 @st.cache_data
 def load_data():
     # loading the main dataset
-    df = pd.read_csv(r"A:\UM\nassau_candy_project\data\Nassau Candy Distributor.csv")
+    # df = pd.read_csv(r"A:\UM\nassau_candy_project\data\Nassau Candy Distributor.csv")
 
     # using a relative path so this works both locally and on Streamlit Cloud
-    # df = pd.read_csv('data/Nassau Candy Distributor.csv')
+    df = pd.read_csv('data/Nassau Candy Distributor.csv')
 
     # converting date columns from text to proper datetime format
     # without this conversion we cannot subtract dates to get lead time
