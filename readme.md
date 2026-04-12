@@ -18,7 +18,7 @@ This project changes that. Using two years of real shipment data, we built a com
 
 | What We Looked At | What We Found |
 |---|---|
-| Total orders analyzed | 10,194 orders over 2 years |
+| Total orders analyzed | 10,194 orders |
 | Routes mapped | 196 unique factory-to-state routes |
 | Best performing route | Secret Factory → New Mexico (0% delays, perfect score) |
 | Worst performing route | Sugar Shack → New Jersey (100% delays, score: 0.0009) |
